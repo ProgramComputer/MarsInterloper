@@ -1,0 +1,80 @@
+PDS_VERSION_ID                = PDS3
+RECORD_TYPE                   = FIXED_LENGTH
+FILE_RECORDS                  = 12288
+RECORD_BYTES                  = 24576
+^IMAGE                        = "MEGT_N_512_1.IMG"
+DATA_SET_ID                   = "MGS-M-MOLA-5-MEGDR-L3-V1.0"
+PRODUCT_ID                    = "MEGT_N_512_1.IMG"
+SPACECRAFT_NAME               = "MARS GLOBAL SURVEYOR"
+INSTRUMENT_ID                 = MOLA
+INSTRUMENT_NAME               = "MARS ORBITER LASER ALTIMETER"
+TARGET_NAME                   = MARS
+START_TIME                    = 1997-09-15T19:10:00.000
+STOP_TIME                     = 2001-06-30T11:10:40.000
+START_ORBIT_NUMBER            = 3
+STOP_ORBIT_NUMBER             = 20333
+PRODUCT_CREATION_TIME         = 2004-07-21T01:00:00
+PRODUCT_VERSION_ID            = "1.0"
+PRODUCER_ID                   = MGS_MOLA_TEAM
+PRODUCER_FULL_NAME            = "DAVID E. SMITH"
+PRODUCER_INSTITUTION_NAME     = "GODDARD SPACE FLIGHT CENTER"
+DESCRIPTION                   = "This data product is a topographic
+ map of the north pole of Mars at a resolution of 512 pixels per degree,
+ based on altimetry data acquired by the Mars Global Surveyor MOLA
+ instrument and accumulated over the course of the primary and extended
+ mission. The MOLA Precision Experiment Data Records (PEDRs) are the
+ source for this data set. Map coordinates use
+ the IAU2000 reference system and the areoid defined by the Goddard Mars
+ potential model GMM3 (mgm1025) evaluated to degree and order 50. The
+ binned data include all MOLA nadir observations from the Mapping Phase
+ through the Primary and Extended missions, from the end of aerobraking
+ in February 1999 through June 2001."
+
+OBJECT                        = IMAGE
+ NAME                         = MEDIAN_TOPOGRAPHY
+ LINES                        = 12288
+ LINE_SAMPLES                 = 12288
+ SAMPLE_TYPE                  = MSB_UNSIGNED_INTEGER
+ SAMPLE_BITS                  = 16
+ UNIT                         = METER
+ SCALING_FACTOR               = 0.25
+ OFFSET                       = -8000
+ DESCRIPTION                  = "Each sample represents median
+observed topography in units of meters relative to the 3396000 meter
+datum at the equator. The topographic datum is an equipotential surface
+defined by the Goddard Mars potential model GMM3 (mgm1025) evaluated to
+degree and order 50, in the IAU2000 reference frame. To obtain the
+observed topography value, apply the above scaling factor and offset:
+   TOPOGRAPHY = (STORED VALUE * SCALING_FACTOR) + OFFSET."
+END_OBJECT                    = IMAGE
+
+OBJECT                        = IMAGE_MAP_PROJECTION
+ ^DATA_SET_MAP_PROJECTION     = "DSMAP_POLAR.CAT"
+ MAP_PROJECTION_TYPE          = "POLAR STEREOGRAPHIC"
+ A_AXIS_RADIUS                = 3376.2 <KM>
+ B_AXIS_RADIUS                = 3376.2 <KM>
+ C_AXIS_RADIUS                = 3376.2 <KM>
+ FIRST_STANDARD_PARALLEL      = 'N/A'
+ SECOND_STANDARD_PARALLEL     = 'N/A'
+ POSITIVE_LONGITUDE_DIRECTION = "EAST"
+ CENTER_LATITUDE              = 90.0 <DEGREE>
+ CENTER_LONGITUDE             = 'N/A'
+ REFERENCE_LATITUDE           = 'N/A'
+ REFERENCE_LONGITUDE          = 'N/A'
+ LINE_FIRST_PIXEL             = 1
+ LINE_LAST_PIXEL              = 12288
+ SAMPLE_FIRST_PIXEL           = 1
+ SAMPLE_LAST_PIXEL            = 12288
+ MAP_PROJECTION_ROTATION      = 0.0
+ MAP_RESOLUTION               = 512.0 <PIXEL/DEGREE>
+ MAP_SCALE                    = 0.115 <KM/PIXEL>
+ MAXIMUM_LATITUDE             = 90.00 <DEGREE>
+ MINIMUM_LATITUDE             = 73.15 <DEGREE>
+ WESTERNMOST_LONGITUDE        = 'N/A'
+ EASTERNMOST_LONGITUDE        = 'N/A'
+ LINE_PROJECTION_OFFSET       = 'N/A'
+ SAMPLE_PROJECTION_OFFSET     = 'N/A'
+ COORDINATE_SYSTEM_TYPE       = "BODY-FIXED ROTATING"
+ COORDINATE_SYSTEM_NAME       = "PLANETOCENTRIC"
+END_OBJECT                    = IMAGE_MAP_PROJECTION
+END

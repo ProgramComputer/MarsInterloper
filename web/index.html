@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mars Interloper</title>
+    <!-- Mars-themed favicons -->
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="alternate icon" href="favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="css/style.css">
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s ease;
+        }
+        
+        #loading-bar {
+            width: 300px;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        
+        #loading-progress {
+            width: 0%;
+            height: 100%;
+            background-color: #e55e2b;
+            transition: width 0.3s ease;
+        }
+        
+        #blocker {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 99;
+        }
+        
+        #instructions {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            cursor: pointer;
+            user-select: none; /* Prevent text selection which can interfere with click events */
+        }
+        
+        #click-to-play {
+            padding: 15px 30px;
+            background-color: rgba(229, 94, 43, 0.8);
+            color: white;
+            border-radius: 8px;
+            font-size: 18px;
+            margin-top: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        
+        #click-to-play:hover {
+            background-color: rgba(229, 94, 43, 1);
+        }
+        
+        .title {
+            font-size: 36px;
+            color: #e55e2b;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px rgba(229, 94, 43, 0.7);
+        }
+        
+        .controls {
+            font-size: 16px;
+            color: #ccc;
+            margin-bottom: 10px;
+        }
+        
+        .crater-name {
+            display: none;
+        }
+        
+        .small-text {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    
+    <div id="loading-screen">
+        <h1 class="title">MARS INTERLOPER</h1>
+        <p>Loading Mars environment...</p>
+        <div id="loading-bar">
+            <div id="loading-progress"></div>
+        </div>
+    </div>
+    
+    <div id="blocker">
+        <div id="instructions">
+            <h1 class="title">MARS INTERLOPER</h1>
+            <p class="controls">Move: WASD | Look: Mouse | Jump: Space | Menu: ESC</p>
+            <div id="click-to-play">CLICK TO PLAY</div>
+            <p class="controls small-text">Press 'H' to hide controls</p>
+        </div>
+    </div>
+
+    <div id="ui-overlay">
+        <div id="crosshair">+</div>
+        <div id="interaction-prompt"></div>
+        <div id="notification-area"></div>
+    </div>
+
+    <div id="game-menu" class="hidden">
+        <div class="menu-container">
+            <h2>Mars Interloper</h2>
+            <button id="resume-btn">Resume</button>
+            <button id="restart-btn">Restart</button>
+            <button id="controls-btn">Controls</button>
+            <button id="exit-btn">Exit to Main Menu</button>
+        </div>
+    </div>
+
+    <div id="controls-screen" class="hidden">
+        <div class="controls-container">
+            <h2>Controls</h2>
+            <ul>
+                <li><strong>W, A, S, D</strong> - Move around</li>
+                <li><strong>Mouse</strong> - Look around</li>
+                <li><strong>E</strong> - Interact with objects</li>
+                <li><strong>I</strong> - Open inventory</li>
+                <li><strong>ESC</strong> - Pause/Menu</li>
+            </ul>
+            <button id="back-btn">Back</button>
+        </div>
+    </div>
+
+    <div id="inventory-screen" class="hidden">
+        <div class="inventory-container">
+            <h2>Inventory</h2>
+            <div id="inventory-items">
+                <!-- Inventory items will be added here dynamically -->
+            </div>
+            <button id="inventory-close-btn">Close</button>
+        </div>
+    </div>
+
+    <!-- Game scripts -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/examples/jsm/controls/PointerLockControls.js": "https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js",
+                "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"
+            }
+        }
+    </script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html> 
