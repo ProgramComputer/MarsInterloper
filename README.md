@@ -26,29 +26,34 @@ Mars Interloper is a browser-based game that leverages modern web technologies t
 
 1. Clone the repository:
    ```
-   git lfs install
    git clone https://github.com/ProgramComputer/marsinterloper.git
    cd marsinterloper
    ```
 
-2. Install backend dependencies:
+2. Download MOLA data (optional, for Mars terrain generation):
+   ```
+   chmod +x download_mola_data.sh
+   ./download_mola_data.sh
+   ```
+
+3. Install backend dependencies:
    ```
    go mod tidy
    ```
 
-3. Install frontend dependencies:
+4. Install frontend dependencies:
    ```
    cd web
    npm install
    cd ..
    ```
 
-4. Start the development server:
+5. Start the development server:
    ```
    go run cmd/server/main.go
    ```
 
-5. Open your browser and navigate to `http://localhost:8080`
+6. Open your browser and navigate to `http://localhost:8080`
 
 ## Project Structure
 

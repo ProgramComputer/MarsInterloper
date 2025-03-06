@@ -5,6 +5,7 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 /tmp
+.env
 # Binaries for programs and plugins
 *.exe
 *.exe~
