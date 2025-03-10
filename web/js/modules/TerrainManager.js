@@ -472,148 +472,26 @@ export class TerrainManager {
     createTerrain() {
         //console.log('MarsInterloper: Creating terrain with proper ground level positioning');
         
-        // Define terrain dimensions
-        const terrainWidth = this.terrainSize;
-        const terrainDepth = this.terrainSize;
-        const terrainResolution = this.terrainResolution;
+        // Instead of using a different generation method for the initial terrain,
+        // we'll use the exact same generation logic as the dynamic chunks
         
-        // Create a noise generator for terrain
-        const seed = 12345; // Fixed seed for consistent terrain
+        // Define the central chunk coordinates (0,0)
+        const centralChunkX = 0;
+        const centralChunkZ = 0;
+        const centralChunkKey = "0,0";
         
-        // Initialize heightmap array if not already created
-        if (!this.heightData) {
-            this.heightData = [];
-            
-            // Generate terrain data using noise
-            // This will create a more natural-looking Martian landscape
-            for (let i = 0; i < terrainResolution; i++) {
-                for (let j = 0; j < terrainResolution; j++) {
-                    const x = i / terrainResolution;
-                    const y = j / terrainResolution;
-                    
-                    // Multi-octave noise for more realistic terrain features
-                    // Use multiple frequencies to create varied features at different scales
-                    const largeFeatures = this.deterministicNoise(x * 2, y * 2) * 0.5;
-                    const mediumFeatures = this.deterministicNoise(x * 5, y * 5) * 0.3;
-                    const smallFeatures = this.deterministicNoise(x * 10, y * 10) * 0.15;
-                    const microDetails = this.deterministicNoise(x * 25, y * 25) * 0.05;
-                    
-                    // Combine features with different weights
-                    let height = largeFeatures + mediumFeatures + smallFeatures + microDetails;
-                    
-                    // Apply additional noise patterns for dunes, ridges, and erosion features
-                    // Add some ridge formations using absolute sine wave patterns
-                    const ridges = Math.abs(Math.sin(x * 15 + this.deterministicNoise(x, y) * 3)) * 0.1;
-                    
-                    // Create some crater-like depressions
-                    const distFromCenter = Math.sqrt(Math.pow(x - 0.5, 2) + Math.pow(y - 0.5, 2));
-                    const craterEffect = Math.max(0, 0.08 - distFromCenter * 0.15);
-                    
-                    // Add weathering and erosion patterns
-                    const erosion = this.deterministicNoise(x * 50, y * 50) * 0.03;
-                    
-                    // Combine all effects
-                    height = height + ridges - craterEffect + erosion;
-                    
-                    // Scale to terrain height
-                    height = height * this.terrainMaxHeight;
-                    
-                    // Ensure we don't go below zero height (no need for Mars ocean)
-                    height = Math.max(0.5, height);
-                    
-                    // Add to height data array
-                    this.heightData.push(height);
-                }
-            }
-            
-            // Add realistic Martian craters to the terrain
-            this.addRealisticCraters();
-        }
+        // Generate the central chunk using the same method as all other chunks
+        const terrain = this.generateChunk(centralChunkX, centralChunkZ, centralChunkKey);
         
-        //console.log('MarsInterloper: Terrain heightmap generated');
+        // Store reference to the central chunk as the main terrain
+        this.terrain = terrain;
         
-        // Create terrain geometry from heightmap
-        const geometry = new THREE.PlaneGeometry(
-            this.terrainSize,
-            this.terrainSize,
-            this.terrainResolution - 1,
-            this.terrainResolution - 1
-        );
+        // Create a debug helper (commented out)
+        // this.addGroundLevelDebugHelper();
         
-        // Apply height data to vertices with proper vertex coordinate mapping
-        const vertices = geometry.attributes.position.array;
-        for (let i = 0, j = 0, l = vertices.length; i < l; i++, j += 3) {
-            // Vertex coordinates in geometry are [x, y, z] 
-            // When we rotate the plane, z becomes y (height)
-            vertices[j + 2] = this.heightData[i];
-        }
-        
-        // Configure UV coordinates for the main terrain
-        this.configureTerrainUVs(geometry, (normalizedX, normalizedY) => {
-            // Convert normalized position to world space coordinates
-            const worldX = (normalizedX - 0.5) * this.terrainSize;
-            const worldZ = (normalizedY - 0.5) * this.terrainSize;
-            return { x: worldX, z: worldZ };
-        });
-        
-        // Update normals for lighting
-        geometry.computeVertexNormals();
-        
-        // Create material with Mars texture
-        const marsTexture = this.assetManager.getTexture('mars_color');
-        
-        // Configure texture for location-specific mapping
-        if (marsTexture) {
-            marsTexture.wrapS = THREE.ClampToEdgeWrapping;
-            marsTexture.wrapT = THREE.ClampToEdgeWrapping;
-            marsTexture.repeat.set(1, 1);
-        }
-        
-        const material = new THREE.MeshStandardMaterial({
-            map: marsTexture,
-            roughness: 0.8,
-            metalness: 0.2,
-            wireframe: false
-        });
-        
-        // Create terrain mesh
-        this.terrain = new THREE.Mesh(geometry, material);
-        
-        // Rotate to make it flat on the ground
-        this.terrain.rotation.x = -Math.PI / 2;
-        
-        // Center the terrain
-        this.terrain.position.set(0, 0, 0);
-        
-        // Log sample height points to verify rendering
-        const cornerX = -this.terrainSize/2 + 10;
-        const cornerZ = -this.terrainSize/2 + 10;
-        const centerX = 0;
-        const centerZ = 0;
-        
-        const cornerHeight = this.getTerrainHeightAt(cornerX, cornerZ);
-        const centerHeight = this.getTerrainHeightAt(centerX, centerZ);
-        
-        //console.log(`TERRAIN-DEBUG: Corner height at (${cornerX}, ${cornerZ}): ${cornerHeight.toFixed(2)}`);
-        //console.log(`TERRAIN-DEBUG: Center height at (${centerX}, ${centerZ}): ${centerHeight.toFixed(2)}`);
-        
-        // Optimize for static terrain
-        this.terrain.matrixAutoUpdate = false;
-        this.terrain.updateMatrix();
-        
-        // Allow the terrain to have shadows
-        this.terrain.receiveShadow = true;
-        
-        // Add to scene
-        this.scene.add(this.terrain);
-        
-        // Mark the original terrain chunk as loaded
-        this.loadedChunks.set("0,0", this.terrain);
         //console.log('MarsInterloper: Terrain created and marked as central chunk');
         
-        // Add debug helper to visualize the ground level
-        // Commented out to remove debug visualizations
-        // this.addGroundLevelDebugHelper();
+        return terrain;
     }
     
     // Add this helper method to debug the ground level
@@ -750,11 +628,6 @@ export class TerrainManager {
                 const chunkKey = `${x},${z}`;
                 loadedChunkKeys.add(chunkKey);
                 
-                // Skip the original terrain chunk at 0,0
-                if (x === 0 && z === 0 && this.terrain) {
-                    continue;
-                }
-                
                 // If chunk isn't already loaded, add it to the load list
                 if (!this.loadedChunks.has(chunkKey)) {
                     chunksToLoad.push({ x, z, key: chunkKey });
@@ -786,11 +659,6 @@ export class TerrainManager {
         // Collect chunks to unload (that are too far away)
         const chunksToUnload = [];
         for (const [key, chunk] of this.loadedChunks.entries()) {
-            // Skip the original terrain chunk - always keep it loaded
-            if (key === "0,0" && chunk === this.terrain) {
-                continue;
-            }
-            
             if (!loadedChunkKeys.has(key)) {
                 chunksToUnload.push(key);
             }
@@ -1059,8 +927,9 @@ export class TerrainManager {
                         const normalizedDist = pointDistFromCenter / baseRadius;
                         heightData[index] = maxHeight * (1.0 - normalizedDist * normalizedDist);
                     } else {
-                        // Outside the volcano - use base terrain height
-                        heightData[index] = 0.5 + Math.random() * 0.2;
+                        // Outside the volcano - use base terrain height with deterministic noise
+                        const noiseVal = this.perlinNoise(pointWorldJ, pointWorldI, seed);
+                        heightData[index] = 0.5 + noiseVal * 0.2;
                     }
                 }
             }
@@ -1098,338 +967,128 @@ export class TerrainManager {
                                 Math.cos(worldJ * 0.15 + worldI * 0.05 + seed * 0.02);
                 elevation += (noiseVal + 1) * 1.5; // Similar scale to the original Math.random() * 3.0
                 
-                // Store the elevation
+                // Add secondary perlin noise
+                const perlin = this.perlinNoise(worldJ * 0.02, worldI * 0.02, seed * 0.001);
+                elevation += perlin * 2.0;
+                
+                // Add some ridge formations using absolute sine wave patterns
+                const ridges = Math.abs(Math.sin(worldJ * 0.1 + worldI * 0.1 + this.perlinNoise(worldJ * 0.05, worldI * 0.05, seed) * 3)) * 1.0;
+                elevation += ridges;
+                
+                // Ensure reasonable min/max values
+                elevation = Math.max(0.5, Math.min(this.terrainMaxHeight, elevation));
+                
+                // Store the height
                 heightData[index] = elevation;
             }
-        }
-        
-        // Still run the blending for smooth transitions between chunks
-        if (Math.abs(chunkX) <= 3 && Math.abs(chunkZ) <= 3 && this.heightData) {
-            this.blendWithOriginalTerrain(heightData, chunkX, chunkZ);
         }
         
         return heightData;
     }
     
-    // Blend new chunks with original terrain for smooth transition
-    blendWithOriginalTerrain(chunkHeightData, chunkX, chunkZ) {
-        const width = this.chunkResolution;
-        const height = this.chunkResolution;
-        
-        // Track sample heights for debugging
-        const samplePos = [
-            { x: 0, z: 0 },                           // Bottom-left
-            { x: width - 1, z: 0 },                   // Bottom-right
-            { x: 0, z: height - 1 },                  // Top-left
-            { x: width - 1, z: height - 1 }           // Top-right
-        ];
-        
-        // Record heights before blending for debugging
-        const preBlendHeights = samplePos.map(pos => chunkHeightData[pos.z * width + pos.x]);
-        
-        // Constants for edge detection - IMPROVED for better blending
-        const EDGE_REGION_SIZE = 0.25; // Increased from 0.175 for wider blending region
-        const STRONG_BLEND_FACTOR = 0.98; // More aggressive blending (was 0.95)
-        
-        // Project chunk coordinates to world space for sampling
-        const halfTerrainSize = this.terrainSize / 2;
-        const worldMinX = chunkX * this.chunkSize - halfTerrainSize;
-        const worldMinZ = chunkZ * this.chunkSize - halfTerrainSize;
-        
-        // For each point in the height data
-        for (let i = 0; i < height; i++) {
-            for (let j = 0; j < width; j++) {
-                // Calculate normalized position within chunk (0-1)
-                const normalizedI = i / (height - 1);
-                const normalizedJ = j / (width - 1);
-                
-                // Determine if we're in an edge region that needs blending
-                const isLeftEdge = normalizedJ < EDGE_REGION_SIZE;
-                const isRightEdge = normalizedJ > (1 - EDGE_REGION_SIZE);
-                const isBottomEdge = normalizedI < EDGE_REGION_SIZE;
-                const isTopEdge = normalizedI > (1 - EDGE_REGION_SIZE);
-                
-                // Skip if not in an edge region
-                if (!isLeftEdge && !isRightEdge && !isBottomEdge && !isTopEdge) {
-                    continue;
-                }
-                
-                // Calculate world position for this point
-                const worldX = worldMinX + (j / (width - 1)) * this.chunkSize;
-                const worldZ = worldMinZ + (i / (height - 1)) * this.chunkSize;
-                
-                // Get height from original terrain at this world position
-                let originalHeight;
-                try {
-                    // Use calculateInterpolatedHeight for smoother blending
-                    originalHeight = this.calculateInterpolatedHeight(worldX, worldZ);
-                } catch (e) {
-                    // If error, skip this point
-                    continue;
-                }
-                
-                // Skip if original height is invalid
-                if (isNaN(originalHeight)) {
-                    continue;
-                }
-                
-                // Calculate blend factor based on distance from edge
-                // The closer to the edge, the stronger the blend
-                let blendFactor = 0;
-                
-                if (isLeftEdge) {
-                    blendFactor = Math.max(blendFactor, STRONG_BLEND_FACTOR * (1 - normalizedJ / EDGE_REGION_SIZE));
-                }
-                if (isRightEdge) {
-                    blendFactor = Math.max(blendFactor, STRONG_BLEND_FACTOR * (1 - (1 - normalizedJ) / EDGE_REGION_SIZE));
-                }
-                            if (isBottomEdge) {
-                    blendFactor = Math.max(blendFactor, STRONG_BLEND_FACTOR * (1 - normalizedI / EDGE_REGION_SIZE));
-                }
-                if (isTopEdge) {
-                    blendFactor = Math.max(blendFactor, STRONG_BLEND_FACTOR * (1 - (1 - normalizedI) / EDGE_REGION_SIZE));
-                }
-                
-                // Apply cubic easing to blend factor for smoother transition
-                blendFactor = blendFactor * blendFactor * (3 - 2 * blendFactor);
-                
-                // Get current height from chunk data
-                const index = i * width + j;
-                const currentHeight = chunkHeightData[index];
-                
-                // IMPROVED: Limit maximum height difference to prevent extreme transitions
-                const heightDifference = originalHeight - currentHeight;
-                const maxAllowedDifference = 5.0; // Maximum height difference allowed
-                const clampedDifference = Math.max(-maxAllowedDifference, Math.min(maxAllowedDifference, heightDifference));
-                
-                // Apply blended height with clamped difference
-                chunkHeightData[index] = currentHeight + (clampedDifference * blendFactor);
-            }
-        }
-    }
-    
-    // Calculate height at an exact terrain position with interpolation
+    // New method for consistent height calculation across all chunks
     calculateInterpolatedHeight(x, z) {
-        // If within original terrain bounds, use the original height data with bilinear interpolation
-        const halfSize = this.terrainSize / 2;
-        if (Math.abs(x) <= halfSize && Math.abs(z) <= halfSize && this.terrain && this.heightData) {
-            // Convert world coordinates to heightmap coordinates
-            const normalizedX = (x + halfSize) / this.terrainSize;
-            const normalizedZ = (z + halfSize) / this.terrainSize;
-            
-            // Calculate fractional indices
-            const xIndex = normalizedX * (this.terrainResolution - 1);
-            const zIndex = normalizedZ * (this.terrainResolution - 1);
-            
-            // Get integer and fractional parts
-            const x0 = Math.floor(xIndex);
-            const z0 = Math.floor(zIndex);
-            const xFrac = xIndex - x0;
-            const zFrac = zIndex - z0;
-            
-            // Make sure we're within bounds
-            if (x0 >= 0 && x0 < this.terrainResolution - 1 &&
-                z0 >= 0 && z0 < this.terrainResolution - 1) {
-                
-                // Get heights at four corners
-                const h00 = this.heightData[z0 * this.terrainResolution + x0];
-                const h10 = this.heightData[z0 * this.terrainResolution + (x0 + 1)];
-                const h01 = this.heightData[(z0 + 1) * this.terrainResolution + x0];
-                const h11 = this.heightData[(z0 + 1) * this.terrainResolution + (x0 + 1)];
-                
-                // Bilinear interpolation
-                const h0 = h00 * (1 - xFrac) + h10 * xFrac;
-                const h1 = h01 * (1 - xFrac) + h11 * xFrac;
-                
-                // Check if we're near the edge of the original terrain
-                const edgeDistance = Math.min(
-                    normalizedX, 1 - normalizedX,
-                    normalizedZ, 1 - normalizedZ
-                );
-                
-                // If we're near the edge, blend with surrounding chunks
-                if (edgeDistance < 0.1) {
-                    // Get standard interpolated height
-                    const originalHeight = h0 * (1 - zFrac) + h1 * zFrac;
-                    
-                    // Sample height from adjacent chunks
-                    const chunkHeight = this.getTerrainHeightAt(x, z);
-                    
-                    // Blend between original and chunk height near edges
-                    const edgeBlendFactor = Math.max(0, 1 - edgeDistance * 10) * 0.85;
-                    return originalHeight * (1 - edgeBlendFactor) + chunkHeight * edgeBlendFactor;
-                }
-                
-                return h0 * (1 - zFrac) + h1 * zFrac;
-            }
+        // Calculate which chunk contains this position
+        const halfTerrainSize = this.terrainSize / 2;
+        const chunkX = Math.floor((x + halfTerrainSize) / this.chunkSize);
+        const chunkZ = Math.floor((z + halfTerrainSize) / this.chunkSize);
+        
+        // Get local position within the chunk (in range 0 to chunkSize)
+        const localX = (x + halfTerrainSize) - (chunkX * this.chunkSize);
+        const localZ = (z + halfTerrainSize) - (chunkZ * this.chunkSize);
+        
+        // Convert to normalized coordinates (0-1) within chunk
+        const normalizedX = localX / this.chunkSize;
+        const normalizedZ = localZ / this.chunkSize;
+        
+        // Convert to grid coordinates
+        const gridX = normalizedX * (this.chunkResolution - 1);
+        const gridZ = normalizedZ * (this.chunkResolution - 1);
+        
+        // Get integer grid positions
+        const gridX1 = Math.floor(gridX);
+        const gridZ1 = Math.floor(gridZ);
+        const gridX2 = Math.min(gridX1 + 1, this.chunkResolution - 1);
+        const gridZ2 = Math.min(gridZ1 + 1, this.chunkResolution - 1);
+        
+        // Calculate fractional positions for interpolation
+        const fracX = gridX - gridX1;
+        const fracZ = gridZ - gridZ1;
+        
+        // Generate heightmap for this chunk if we need to
+        const chunkKey = `${chunkX},${chunkZ}`;
+        if (!this.marsTerrainChunks.has(chunkKey)) {
+            // Generate chunk height data on demand - this allows us to get heights
+            // even for chunks that aren't fully loaded as meshes yet
+            const heightData = this.generateChunkHeightmap(chunkX, chunkZ);
+            this.marsTerrainChunks.set(chunkKey, heightData);
         }
         
-        // For positions outside original terrain, or if original lookup failed
-        // Use the enhanced getTerrainHeightAt method which handles chunk blending
-        return this.getTerrainHeightAt(x, z);
+        // Get the heightmap data
+        const heightData = this.marsTerrainChunks.get(chunkKey);
+        if (!heightData) {
+            return this.lastValidHeight || 0;
+        }
+        
+        // Get heights at the four corner points
+        const h00 = heightData[gridZ1 * this.chunkResolution + gridX1]; // Bottom left
+        const h10 = heightData[gridZ1 * this.chunkResolution + gridX2]; // Bottom right
+        const h01 = heightData[gridZ2 * this.chunkResolution + gridX1]; // Top left
+        const h11 = heightData[gridZ2 * this.chunkResolution + gridX2]; // Top right
+        
+        // Bilinear interpolation
+        const h0 = h00 * (1 - fracX) + h10 * fracX;
+        const h1 = h01 * (1 - fracX) + h11 * fracX;
+        const height = h0 * (1 - fracZ) + h1 * fracZ;
+        
+        // Save last valid height for fallbacks
+        this.lastValidHeight = height;
+        
+        return height;
     }
     
     // Override getTerrainHeightAt to work with chunks
     getTerrainHeightAt(x, z) {
         try {
-            const halfSize = this.terrainSize / 2;
+            // Clamp coordinates to prevent going too far out of bounds
+            const MAX_DIST = this.terrainSize * this.chunkLoadDistance;
+            x = Math.min(MAX_DIST, Math.max(-MAX_DIST, x));
+            z = Math.min(MAX_DIST, Math.max(-MAX_DIST, z));
             
-            // Limit error logging to avoid console spam
-            if (this.heightErrorCount > 1000) {
-                // Reset counter periodically to allow occasional logging
-                if (Math.random() < 0.01) this.heightErrorCount = 0;
-                // But don't spam the console
-            } else {
-                this.heightErrorCount++;
-            }
-            
-            // Check if we're within the bounds of the original terrain
-            if (Math.abs(x) <= halfSize && Math.abs(z) <= halfSize && this.terrain && this.heightData) {
-                // Calculate normalized coordinates in the range [0, 1]
-                const normalizedX = (x + halfSize) / this.terrainSize;
-                const normalizedZ = (z + halfSize) / this.terrainSize;
-                
-                // Use bilinear interpolation to get a smooth height
-                const height = this.getInterpolatedHeight(normalizedX, normalizedZ, this.terrainResolution, this.heightData);
-                
-                // Update last valid height
-                this.lastValidHeight = height;
-                
-                return height;
-            }
-            
-            // For areas outside original terrain, determine which chunk to use 
-            // Handle chunk boundaries with more precision
-            const chunkX = Math.floor((x + halfSize) / this.chunkSize);
-            const chunkZ = Math.floor((z + halfSize) / this.chunkSize);
+            // First convert world position to chunk coordinates
+            const halfTerrainSize = this.terrainSize / 2;
+            const chunkX = Math.floor((x + halfTerrainSize) / this.chunkSize);
+            const chunkZ = Math.floor((z + halfTerrainSize) / this.chunkSize);
             const chunkKey = `${chunkX},${chunkZ}`;
             
-            // Calculate exact position within chunk
-            const localX = ((x + halfSize) - chunkX * this.chunkSize) / this.chunkSize;
-            const localZ = ((z + halfSize) - chunkZ * this.chunkSize) / this.chunkSize;
+            // Get local position within chunk
+            const localX = (x + halfTerrainSize) - (chunkX * this.chunkSize);
+            const localZ = (z + halfTerrainSize) - (chunkZ * this.chunkSize);
             
-            // Check if we're near a chunk boundary
-            const chunkBoundary = {
-                left: localX < 0.1,
-                right: localX > 0.9,
-                bottom: localZ < 0.1,
-                top: localZ > 0.9
-            };
+            // Convert local position to normalized coordinates (0-1)
+            const normalizedX = localX / this.chunkSize;
+            const normalizedZ = localZ / this.chunkSize;
             
-            // Determine if we're near a corner
-            const isNearCorner = (chunkBoundary.left || chunkBoundary.right) && 
-                                (chunkBoundary.bottom || chunkBoundary.top);
+            // Convert normalized coordinates to grid coordinates
+            // We subtract 1 from resolution because grid coordinates are 0-based
+            const gridX = Math.floor(normalizedX * (this.chunkResolution - 1));
+            const gridZ = Math.floor(normalizedZ * (this.chunkResolution - 1));
             
-            // Get height from current chunk
-            let height = this.samplerChunkHeightAt(chunkX, chunkZ, localX, localZ);
+            // Clamp grid coordinates to valid range
+            const clampedGridX = Math.max(0, Math.min(this.chunkResolution - 2, gridX));
+            const clampedGridZ = Math.max(0, Math.min(this.chunkResolution - 2, gridZ));
             
-            // If height is invalid, try using a fallback
-            if (isNaN(height)) {
-                if (this.lastValidHeight !== undefined) {
-                    if (this.heightErrorCount < 10) { // Limit logging
-                        console.warn(`TERRAIN-ERROR: Invalid height at (${x.toFixed(1)}, ${z.toFixed(1)}), using fallback height ${this.lastValidHeight.toFixed(2)}`);
-                    }
-                    return this.lastValidHeight;
-                } else {
-                    if (this.heightErrorCount < 10) { // Limit logging
-                        console.warn(`TERRAIN-ERROR: Invalid height at (${x.toFixed(1)}, ${z.toFixed(1)}), using default height 0`);
-                    }
-                    return 0; // Default fallback
-                }
-            }
+            // Get the four surrounding grid points
+            return this.calculateInterpolatedHeight(x, z);
             
-            // Update last valid height
-            this.lastValidHeight = height;
-            
-            // If not near any edge, we can return the current height directly
-            if (!chunkBoundary.left && !chunkBoundary.right && !chunkBoundary.bottom && !chunkBoundary.top) {
-                return height;
-            }
-            
-            // Check if we're near any edge - if so, blend with adjacent chunks
-            const isNearEdge = chunkBoundary.left || chunkBoundary.right || 
-                            chunkBoundary.bottom || chunkBoundary.top;
-            
-            if (isNearEdge) {
-                try {
-                    // Calculate adjacent chunk coordinates
-                    let adjChunkX = chunkX;
-                    let adjChunkZ = chunkZ;
-                    
-                    if (chunkBoundary.left) adjChunkX -= 1;
-                    else if (chunkBoundary.right) adjChunkX += 1;
-                    
-                    if (chunkBoundary.bottom) adjChunkZ -= 1;
-                    else if (chunkBoundary.top) adjChunkZ += 1;
-                    
-                    // Calculate blend factor based on distance from edge
-                    let blendFactor = 0;
-                    
-                    if (chunkBoundary.left) blendFactor = Math.max(blendFactor, 1 - (localX * 10));
-                    else if (chunkBoundary.right) blendFactor = Math.max(blendFactor, 1 - ((1 - localX) * 10));
-                    
-                    if (chunkBoundary.bottom) blendFactor = Math.max(blendFactor, 1 - (localZ * 10));
-                    else if (chunkBoundary.top) blendFactor = Math.max(blendFactor, 1 - ((1 - localZ) * 10));
-                    
-                    // Adjust blend factor to be stronger near corners - use significant blending (95%)
-                    if (isNearCorner) blendFactor = Math.pow(blendFactor, 0.5) * 0.95; // Stronger corner blending
-                    else blendFactor *= 0.85; // Strong edge blending (85%)
-                    
-                    // Calculate position in adjacent chunk
-                    let adjLocalX = localX;
-                    let adjLocalZ = localZ;
-                    
-                    if (chunkBoundary.left) adjLocalX = 1 - (0.1 - localX) * 10; // Map 0.0-0.1 to 0.0-1.0
-                    else if (chunkBoundary.right) adjLocalX = (localX - 0.9) * 10; // Map 0.9-1.0 to 0.0-1.0
-                    
-                    if (chunkBoundary.bottom) adjLocalZ = 1 - (0.1 - localZ) * 10;
-                    else if (chunkBoundary.top) adjLocalZ = (localZ - 0.9) * 10;
-                    
-                    // Clamp to valid range
-                    adjLocalX = Math.max(0, Math.min(1, adjLocalX));
-                    adjLocalZ = Math.max(0, Math.min(1, adjLocalZ));
-                    
-                    // Sample height from adjacent chunk
-                    const adjHeight = this.samplerChunkHeightAt(adjChunkX, adjChunkZ, adjLocalX, adjLocalZ);
-                    
-                    // If adjacent height is valid, blend with current height
-                    if (!isNaN(adjHeight)) {
-                        // Blend heights - stronger blending at edges
-                        const blendedHeight = height * (1 - blendFactor) + adjHeight * blendFactor;
-                        
-                        // Update the last valid height
-                        this.lastValidHeight = blendedHeight;
-                        
-                        if (Math.random() < 0.01) {
-                            /* console.log(`TERRAIN-HEIGHT: Blending chunks ${chunkKey} and ${adjChunkX},${adjChunkZ} at (${x.toFixed(1)}, ${z.toFixed(1)}): ${blendedHeight.toFixed(2)}`); */
-                        }
-                        
-                        // When transition between chunks with significant height difference, 
-                        // prefer the adjacent height value to avoid "cliffs"
-                        if (Math.abs(height - adjHeight) > 1.0) {
-                            // Return a height that is heavily biased toward the adjacent chunk
-                            return height * 0.15 + adjHeight * 0.85;
-                        }
-                        
-                        return blendedHeight;
-                    }
-                } catch (e) {
-                    // Error getting adjacent height - continue with current height
-                    /* console.warn(`TERRAIN-ERROR: Failed to get adjacent height at (${x.toFixed(1)}, ${z.toFixed(1)})`, e); */
-                }
-            }
-            
-            if (Math.random() < 0.01) {
-                /* console.log(`TERRAIN-HEIGHT: Using chunk ${chunkKey} for height at (${x.toFixed(1)}, ${z.toFixed(1)}): ${height.toFixed(2)}`); */
-            }
-            
-            return height;
         } catch (error) {
-            // Global error handler for the entire method
-            /* console.warn(`TERRAIN-ERROR: Critical error in getTerrainHeightAt(${x}, ${z}):`, error); */
+            this.heightErrorCount++;
+            if (this.heightErrorCount < 10) { // Limit error reporting to prevent spam
+                console.warn(`TerrainManager: Error getting terrain height at (${x.toFixed(2)}, ${z.toFixed(2)}):`, error);
+            }
             
-            // Always try to return a valid height
-            return this.lastValidHeight !== undefined ? this.lastValidHeight : 0;
+            // Fall back to last valid height
+            return this.lastValidHeight || 0;
         }
     }
     
@@ -2040,5 +1699,13 @@ export class TerrainManager {
             uvs[i] = texCoords.u;
             uvs[i + 1] = texCoords.v;
         }
+    }
+    
+    // Add perlinNoise method for terrain generation
+    perlinNoise(x, y, z = 0) {
+        // Simple deterministic noise function similar to basic perlin noise
+        // Based on the existing deterministicNoise function in the codebase
+        const value = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+        return value - Math.floor(value);
     }
 } 

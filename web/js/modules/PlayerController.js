@@ -70,15 +70,33 @@ export class PlayerController {
                     // Start slightly above terrain with minimum height check to avoid underground spawning
                     const minStartHeight = 5; // Minimum starting height to ensure visibility
                     
-                    // FIXED: Use the same small ground buffer as in PhysicsManager
-                    const groundBuffer = 0.1;
+                    // Use a more generous ground buffer for initial spawn to prevent underground spawning
+                    const spawnGroundBuffer = 2.0; // Increased from 0.1 to ensure player is above ground
                     
-                    // Adjusted starting height to match the ground properly
-                    const startHeight = Math.max(terrainHeight + groundBuffer, minStartHeight);
+                    // Sample multiple points around spawn location to find the highest terrain point
+                    const sampleRadius = 1.0;
+                    const samplePoints = [
+                        [startX, startZ],
+                        [startX + sampleRadius, startZ],
+                        [startX - sampleRadius, startZ],
+                        [startX, startZ + sampleRadius],
+                        [startX, startZ - sampleRadius]
+                    ];
+                    
+                    let highestTerrainPoint = terrainHeight;
+                    for (const [x, z] of samplePoints) {
+                        const height = this.terrainManager.getTerrainHeightAt(x, z);
+                        if (height !== undefined && !isNaN(height) && height > highestTerrainPoint) {
+                            highestTerrainPoint = height;
+                        }
+                    }
+                    
+                    // Adjusted starting height to match the ground properly and ensure player is above ground
+                    const startHeight = Math.max(highestTerrainPoint + spawnGroundBuffer, minStartHeight);
                     
                     this.position.set(startX, startHeight, startZ);
-                    //console.log(`MarsInterloper: Starting player at position: (${this.position.x}, ${this.position.y}, ${this.position.z})`);
-                    //console.log(`MarsInterloper: Player is ${this.position.y - terrainHeight} units above terrain`);
+                    console.log(`MarsInterloper: Starting player at position: (${this.position.x.toFixed(2)}, ${this.position.y.toFixed(2)}, ${this.position.z.toFixed(2)})`);
+                    console.log(`MarsInterloper: Player is ${(this.position.y - highestTerrainPoint).toFixed(2)} units above terrain`);
                     
                     // If physics is available, set initial position there too
                     if (this.physicsManager) {

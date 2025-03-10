@@ -80,18 +80,38 @@ export class PhysicsManager {
             const x = this.dummyPlayerPosition.x;
             const z = this.dummyPlayerPosition.z;
             
-            // Get terrain height at player position
-            const groundHeight = this.terrainManager.getTerrainHeightAt(x, z);
+            // Sample multiple points around player to find highest terrain point
+            const sampleRadius = 1.0;
+            const numSamplePoints = 9; // Center + 8 points around
+            let highestPoint = -Infinity;
             
-            if (isNaN(groundHeight)) {
+            // Start with center point
+            highestPoint = this.terrainManager.getTerrainHeightAt(x, z);
+            
+            // Sample points in a circle around the player
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const sampleX = x + Math.cos(angle) * sampleRadius;
+                const sampleZ = z + Math.sin(angle) * sampleRadius;
+                
+                const height = this.terrainManager.getTerrainHeightAt(sampleX, sampleZ);
+                if (!isNaN(height) && height > highestPoint) {
+                    highestPoint = height;
+                }
+            }
+            
+            if (isNaN(highestPoint) || highestPoint === -Infinity) {
                 console.warn(`PhysicsManager: Cannot force to ground - invalid terrain height at (${x.toFixed(2)}, ${z.toFixed(2)})`);
                 return;
             }
             
-            // Set player position to terrain height plus buffer
-            const newY = groundHeight + this.groundBuffer;
+            // Use a slightly larger buffer when forcing to ground to prevent falling through
+            const forceGroundBuffer = 0.5; // Increased from default groundBuffer
             
-            //console.log(`PhysicsManager: Forcing player to ground. Ground height: ${groundHeight.toFixed(2)}, New Y position: ${newY.toFixed(2)}`);
+            // Set player position to terrain height plus buffer
+            const newY = highestPoint + forceGroundBuffer;
+            
+            console.log(`PhysicsManager: Forcing player to ground. Ground height: ${highestPoint.toFixed(2)}, New Y position: ${newY.toFixed(2)}`);
             
             // Update position and reset velocity
             this.dummyPlayerPosition.y = newY;

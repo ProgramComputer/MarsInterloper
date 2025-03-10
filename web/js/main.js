@@ -130,20 +130,48 @@ class MarsInterloper {
             const playerHeight = 1.8;
             
             if (this.terrain) {
+                // Sample multiple points around spawn location to find the highest terrain point
+                const sampleRadius = 1.0;
+                const samplePoints = [
+                    [startX, startZ],
+                    [startX + sampleRadius, startZ],
+                    [startX - sampleRadius, startZ],
+                    [startX, startZ + sampleRadius],
+                    [startX, startZ - sampleRadius],
+                    [startX + sampleRadius, startZ + sampleRadius],
+                    [startX - sampleRadius, startZ - sampleRadius],
+                    [startX + sampleRadius, startZ - sampleRadius],
+                    [startX - sampleRadius, startZ + sampleRadius]
+                ];
+                
+                // Get height at center point
                 terrainHeight = this.terrain.getTerrainHeightAt(startX, startZ);
+                
+                // Check surrounding points for higher terrain
+                for (const [x, z] of samplePoints) {
+                    const height = this.terrain.getTerrainHeightAt(x, z);
+                    if (height !== undefined && !isNaN(height) && height > terrainHeight) {
+                        terrainHeight = height;
+                    }
+                }
+                
                 if (terrainHeight !== undefined && !isNaN(terrainHeight)) {
-                    //Console.log(`PHYSICS-INIT: Terrain height at start position: ${terrainHeight.toFixed(2)}`);
+                    console.log(`PHYSICS-INIT: Maximum terrain height at spawn area: ${terrainHeight.toFixed(2)}`);
                 } else {
                     terrainHeight = 0;
                     console.warn('PHYSICS-INIT: Could not get valid terrain height, using default height 0');
                 }
             }
             
-            // Force player to start exactly at terrain height + player height
-            const startingY = terrainHeight + playerHeight;
+            // Add a safe buffer to ensure player doesn't spawn in the ground
+            const safeBuffer = 2.0; // Generous buffer to prevent underground spawning
+            
+            // Force player to start safely above terrain
+            const startingY = terrainHeight + playerHeight + safeBuffer;
             this.physics.dummyPlayerPosition.set(startX, startingY, startZ);
             this.physics.dummyPlayerVelocity.set(0, 0, 0); // No initial velocity
-            //Console.log(`PHYSICS-INIT: Forced player to start exactly at terrain surface: (${startX}, ${startingY.toFixed(2)}, ${startZ})`);
+            console.log(`PHYSICS-INIT: Forced player to start above terrain: (${startX}, ${startingY.toFixed(2)}, ${startZ})`);
+            console.log(`PHYSICS-INIT: Player is ${(startingY - terrainHeight).toFixed(2)} units above terrain surface`);
             
             // Initialize sky with special error handling
             try {
