@@ -874,8 +874,8 @@ export class TerrainManager {
         const height = this.chunkResolution;
         const heightData = new Float32Array(width * height);
         
-        // Seed based on chunk position to ensure consistent generation
-        const seed = chunkX * 10000 + chunkZ;
+        // Use a constant global seed instead of chunk-based seed for consistent noise
+        const seed = 12345; // Fixed global seed value
         
         // Calculate world position of this chunk
         const halfTerrainSize = this.terrainSize / 2;
@@ -946,10 +946,19 @@ export class TerrainManager {
                 const worldI = worldZ + (i / (height - 1)) * this.chunkSize;
                 const worldJ = worldX + (j / (width - 1)) * this.chunkSize;
                 
+                // Calculate the normalized position within this chunk (0 to 1)
+                const normalizedI = i / (height - 1);
+                const normalizedJ = j / (width - 1);
+                
+                // Instead of using real world coordinates, simulate coordinates as if this point
+                // was in the initial (0,0) chunk with the same relative position
+                const simulatedWorldI = -this.terrainSize/2 + normalizedI * this.chunkSize;
+                const simulatedWorldJ = -this.terrainSize/2 + normalizedJ * this.chunkSize;
+                
                 // Map to the same coordinate space as the initial terrain generation
                 // This ensures the pattern continues seamlessly
-                const mappedX = ((worldJ + halfTerrainSize) / this.terrainSize) * this.terrainResolution;
-                const mappedY = ((worldI + halfTerrainSize) / this.terrainSize) * this.terrainResolution;
+                const mappedX = ((simulatedWorldJ + this.terrainSize/2) / this.terrainSize) * this.terrainResolution;
+                const mappedY = ((simulatedWorldI + this.terrainSize/2) / this.terrainSize) * this.terrainResolution;
                 
                 // Generate noise using the exact same algorithm as the initial terrain
                 const centerX = this.terrainResolution / 2;
@@ -963,16 +972,16 @@ export class TerrainManager {
                 
                 // Add the same noise as initial terrain - use deterministic noise based on seed
                 // Use a consistent hash to replace the Math.random() call
-                const noiseVal = Math.sin(worldJ * 0.1 + worldI * 0.1 + seed * 0.01) * 
-                                Math.cos(worldJ * 0.15 + worldI * 0.05 + seed * 0.02);
+                const noiseVal = Math.sin(simulatedWorldJ * 0.1 + simulatedWorldI * 0.1 + seed * 0.01) * 
+                                Math.cos(simulatedWorldJ * 0.15 + simulatedWorldI * 0.05 + seed * 0.02);
                 elevation += (noiseVal + 1) * 1.5; // Similar scale to the original Math.random() * 3.0
                 
                 // Add secondary perlin noise
-                const perlin = this.perlinNoise(worldJ * 0.02, worldI * 0.02, seed * 0.001);
+                const perlin = this.perlinNoise(simulatedWorldJ * 0.02, simulatedWorldI * 0.02, seed * 0.001);
                 elevation += perlin * 2.0;
                 
                 // Add some ridge formations using absolute sine wave patterns
-                const ridges = Math.abs(Math.sin(worldJ * 0.1 + worldI * 0.1 + this.perlinNoise(worldJ * 0.05, worldI * 0.05, seed) * 3)) * 1.0;
+                const ridges = Math.abs(Math.sin(simulatedWorldJ * 0.1 + simulatedWorldI * 0.1 + this.perlinNoise(simulatedWorldJ * 0.05, simulatedWorldI * 0.05, seed) * 3)) * 1.0;
                 elevation += ridges;
                 
                 // Ensure reasonable min/max values
