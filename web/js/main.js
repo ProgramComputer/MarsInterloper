@@ -11,6 +11,7 @@ import { PhysicsManager } from './modules/PhysicsManager.js';
 import { MultiplayerManager } from './modules/MultiplayerManager.js';
 import { IntroAnimationManager } from './modules/IntroAnimationManager.js';
 import { TaskManager } from './modules/TaskManager.js';
+import { MobileControlsManager } from './modules/MobileControlsManager.js';
 
 class MarsInterloper {
     constructor() {
@@ -48,6 +49,9 @@ class MarsInterloper {
             this.terrain,
             this.physics
         );
+        
+        // Initialize mobile controls manager
+        this.mobileControls = new MobileControlsManager(this.player);
         
         // Initialize character manager
         this.characters = new CharacterManager(this.sceneManager.scene, this.player);
@@ -280,8 +284,16 @@ class MarsInterloper {
             // Now set the playerController reference in terrain manager
             this.terrain.playerController = this.player;
             
-            // Start the intro animation after loading completes
+            // Start intro animation and hide loading screen
             this.showIntroAnimation();
+            
+            // Auto-start on mobile after initialization is complete
+            if (this.mobileControls && this.mobileControls.isMobileDevice()) {
+                // Wait a bit for the intro to start
+                setTimeout(() => {
+                    this.autoStartOnMobile();
+                }, 500);
+            }
             
             //Console.log('MarsInterloper: Game initialized successfully');
         } catch (error) {
@@ -431,6 +443,12 @@ class MarsInterloper {
         // Update player (after physics)
         this.player.update(this.deltaTime);
         
+        // Update mobile controls (if active)
+        if (this.mobileControls && this.mobileControls.enabled) {
+            // The mobile controls manager doesn't need an update method
+            // as it uses event listeners, but we could add one if needed
+        }
+        
         // Update dynamic terrain chunks based on player position
         if (this.terrain && typeof this.terrain.updateChunks === 'function') {
             const playerPosition = this.physics.dummyPlayerPosition || this.player.position;
@@ -566,6 +584,11 @@ class MarsInterloper {
         try {
             //Console.log('MarsInterloper: Displaying controls help');
             
+            // Check if on mobile - don't show controls help on mobile
+            if (this.mobileControls && this.mobileControls.isMobileDevice()) {
+                return; // Skip showing controls on mobile
+            }
+            
             // Toggle controls visibility
             if (this.controlsVisible && this.controlsOverlay) {
                 document.body.removeChild(this.controlsOverlay);
@@ -592,7 +615,6 @@ class MarsInterloper {
                 <p><b>Mouse</b>: Look around</p>
                 <p><b>Space</b>: Jump/Climb objects (like the Starship)</p>
                 <p><b>V</b>: Toggle camera view (First/Third Person)</p>
-                <p><b>K</b>: Toggle debug info</p>
                 <p><b>B</b>: Toggle distance to center display</p>
                 <p><b>T</b>: Toggle terrain debug info</p>
                 <p><b>H</b>: Toggle this controls panel</p>
@@ -789,6 +811,49 @@ class MarsInterloper {
         
         // Update Mars time - one full day/night cycle over marsTimeCycleDuration seconds
         this.marsTimeHours = (this.marsTimeHours + (this.deltaTime * 24 / this.marsTimeCycleDuration)) % 24;
+    }
+    
+    /**
+     * Auto-start the game on mobile devices
+     * Bypasses the "Click to Play" screen
+     */
+    autoStartOnMobile() {
+        try {
+            console.log('MarsInterloper: Auto-starting game on mobile device');
+            
+            // Skip intro animation if it's playing
+            if (this.showingIntroAnimation && this.introAnimation) {
+                // Don't actually skip the intro - we want to keep it
+                // Just make sure the game starts after it finishes
+                console.log('MarsInterloper: Setting up auto-start after intro animation completes');
+                
+                // Store reference to original callback if it exists
+                const originalOnComplete = this.introAnimation.onComplete;
+                
+                // Set new onComplete callback
+                this.introAnimation.onComplete = () => {
+                    console.log('MarsInterloper: Intro animation completed, auto-starting game');
+                    
+                    // Call original callback if it exists
+                    if (typeof originalOnComplete === 'function') {
+                        originalOnComplete();
+                    }
+                    
+                    // Auto-lock pointer and start game
+                    this.player.lockPointer();
+                    // Start game (set running to true)
+                    this.running = true;
+                };
+            } else {
+                console.log('MarsInterloper: No intro animation playing, auto-starting game immediately');
+                // Auto-lock pointer and start game immediately
+                this.player.lockPointer();
+                // Start game (set running to true)
+                this.running = true;
+            }
+        } catch (error) {
+            console.error('MarsInterloper: Error auto-starting game on mobile', error);
+        }
     }
 }
 

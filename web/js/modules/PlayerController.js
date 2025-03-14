@@ -32,9 +32,6 @@ export class PlayerController {
         this.acceleration = 1.0;
         this.playerHeight = 2.0;
         
-        // Debug flags
-        this.showDebugInfo = false;
-        
         // Check if UI elements exist
         if (!this.blocker || !this.instructions) {
             console.error('MarsInterloper: Missing UI elements for pointer lock control. blocker:', !!this.blocker, 'instructions:', !!this.instructions);
@@ -270,9 +267,6 @@ export class PlayerController {
             case 'KeyV':
                 this.toggleCameraMode();
                 break;
-            case 'KeyK':
-                this.toggleDebugInfo();
-                break;
         }
     }
     
@@ -393,11 +387,6 @@ export class PlayerController {
         }
     }
     
-    toggleDebugInfo() {
-        this.showDebugInfo = !this.showDebugInfo;
-        ////console.log(`MarsInterloper: Debug info ${this.showDebugInfo ? 'enabled' : 'disabled'}`);
-    }
-    
     updateWithPhysics(deltaTime) {
         if (!this.physicsManager) return;
         
@@ -511,8 +500,8 @@ export class PlayerController {
             this.position.copy(physicsPosition);
             this.velocity.copy(this.physicsManager.getVelocity());
             
-            // Only log position and velocity if actively moving or debug info enabled
-            if (isMoving || this.showDebugInfo) {
+            // Only log position and velocity if actively moving
+            if (isMoving) {
                 ////console.log(`PLAYER-ASTRONAUT: Physics position: (${physicsPosition.x.toFixed(2)}, ${physicsPosition.y.toFixed(2)}, ${physicsPosition.z.toFixed(2)})`);
                 ////console.log(`PLAYER-ASTRONAUT: Physics velocity: (${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(2)}, ${this.velocity.z.toFixed(2)})`);
             }
@@ -536,7 +525,31 @@ export class PlayerController {
     
     // Add explicit methods for pointer lock control
     lockPointer() {
-        if (this.controls) {
+        if (!this.controls) {
+            console.error('MarsInterloper: Cannot lock pointer - controls not initialized');
+            return;
+        }
+
+        // Check if on mobile - handle differently
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                      (window.innerWidth <= 800 && window.innerHeight <= 600);
+        
+        if (isMobile) {
+            try {
+                // On mobile, we don't need pointer lock - just enable controls and hide blocker
+                ////console.log('MarsInterloper: Mobile device detected, enabling controls without pointer lock');
+                this.enabled = true;
+                
+                // Hide blocker and instructions
+                if (this.blocker) this.blocker.style.display = 'none';
+                if (this.instructions) this.instructions.style.display = 'none';
+                
+                // Fire the 'lock' event to maintain API consistency
+                this.controls.dispatchEvent({ type: 'lock' });
+            } catch (error) {
+                console.error('MarsInterloper: Error in mobile controls setup', error);
+            }
+        } else {
             try {
                 ////console.log('MarsInterloper: Manually requesting pointer lock');
                 // Only request pointer lock if it's from a user event handler
@@ -546,8 +559,6 @@ export class PlayerController {
             } catch (error) {
                 console.error('MarsInterloper: Error in manual pointer lock request', error);
             }
-        } else {
-            console.error('MarsInterloper: Cannot lock pointer - controls not initialized');
         }
     }
     

@@ -9,6 +9,8 @@
     <link rel="alternate icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="css/style.css">
     <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <!-- Nipple.js for mobile controls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -121,6 +123,64 @@
             opacity: 0.8;
             margin-top: 20px;
         }
+        
+        /* Mobile-specific and desktop-specific classes */
+        .mobile-show {
+            display: none; /* Hide by default on desktop */
+        }
+        
+        .mobile-hide {
+            display: block; /* Show by default on desktop */
+        }
+        
+        /* Mobile Controls Styling */
+        @media (max-width: 768px) {
+            #mobile-controls {
+                height: 120px !important;
+            }
+            
+            #click-to-play {
+                font-size: 16px;
+                padding: 12px 24px;
+            }
+            
+            .controls {
+                font-size: 14px;
+            }
+            
+            .title {
+                font-size: 30px;
+            }
+            
+            /* Hide desktop-specific controls on mobile */
+            .mobile-hide {
+                display: none !important;
+            }
+            
+            /* Show mobile-specific controls on mobile */
+            .mobile-show {
+                display: block !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            #mobile-controls {
+                height: 100px !important;
+            }
+            
+            #click-to-play {
+                font-size: 14px;
+                padding: 10px 20px;
+            }
+            
+            .controls {
+                font-size: 12px;
+            }
+            
+            .title {
+                font-size: 24px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -137,9 +197,11 @@
     <div id="blocker">
         <div id="instructions">
             <h1 class="title">MARS INTERLOPER</h1>
-            <p class="controls">Move: WASD | Look: Mouse | Jump: Space | Menu: ESC</p>
+            <p class="controls mobile-hide">Move: WASD | Look: Mouse | Jump: Space | Menu: ESC</p>
+            <p class="controls mobile-show">Mobile: Left Joystick to Move, Right Joystick to Look</p>
+            <p class="controls mobile-show">Long-press Left Joystick to Jump</p>
             <div id="click-to-play">CLICK TO PLAY</div>
-            <p class="controls small-text">Press 'H' to hide controls</p>
+            <p class="controls small-text mobile-hide">Press 'H' to hide controls</p>
         </div>
     </div>
 
@@ -162,12 +224,20 @@
     <div id="controls-screen" class="hidden">
         <div class="controls-container">
             <h2>Controls</h2>
+            <h3>Desktop</h3>
             <ul>
                 <li><strong>W, A, S, D</strong> - Move around</li>
                 <li><strong>Mouse</strong> - Look around</li>
-                <li><strong>E</strong> - Interact with objects</li>
-                <li><strong>I</strong> - Open inventory</li>
+                <li><strong>Space</strong> - Jump/Climb</li>
+                <li><strong>V</strong> - Toggle camera view</li>
                 <li><strong>ESC</strong> - Pause/Menu</li>
+                <li><strong>H</strong> - Show/hide controls</li>
+            </ul>
+            <h3>Mobile</h3>
+            <ul>
+                <li><strong>Left Joystick</strong> - Move around</li>
+                <li><strong>Right Joystick</strong> - Look around</li>
+                <li><strong>Long-press Left Joystick</strong> - Jump/Climb</li>
             </ul>
             <button id="back-btn">Back</button>
         </div>
@@ -187,12 +257,33 @@
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/examples/jsm/controls/PointerLockControls.js": "https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js",
-                "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"
+                "three": "https://unpkg.com/three@0.174.0/build/three.module.js",
+                "three/examples/jsm/controls/PointerLockControls.js": "https://unpkg.com/three@0.174.0/examples/jsm/controls/PointerLockControls.js",
+                "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.174.0/examples/jsm/loaders/GLTFLoader.js"
             }
         }
     </script>
     <script type="module" src="js/main.js"></script>
+    <script>
+        // Add mobile detection and hide desktop controls on mobile
+        document.addEventListener('DOMContentLoaded', function() {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                            (window.innerWidth <= 800 && window.innerHeight <= 600);
+            
+            if (isMobile) {
+                // Hide desktop-specific elements
+                document.querySelectorAll('.controls').forEach(el => {
+                    if (!el.classList.contains('mobile-show')) {
+                        el.classList.add('mobile-hide');
+                    }
+                });
+                
+                const clickToPlay = document.getElementById('click-to-play');
+                if (clickToPlay) {
+                    clickToPlay.classList.add('mobile-hide');
+                }
+            }
+        });
+    </script>
 </body>
 </html> 
