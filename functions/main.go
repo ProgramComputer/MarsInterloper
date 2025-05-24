@@ -53,7 +53,7 @@ func main() {
 	mux.HandleFunc("/api/mars/elevation", handleMarsElevation)
 	mux.HandleFunc("/api/mars/chunk", handleMarsChunk)
 	mux.HandleFunc("/api/mars/sky", handleMarsSky)
-	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/api/health", handleHealth)
 
 	// Serve assets from R2 bucket
 	mux.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
