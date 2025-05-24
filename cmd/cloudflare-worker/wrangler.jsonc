@@ -1,0 +1,14 @@
+{
+  "name": "marsinterloper",
+  "main": "./build/worker.mjs",
+  "compatibility_date": "2025-05-24",
+  "vars": {
+    "ALLOWED_ORIGIN": "https://mars.paulius.trade"
+  },
+  "routes": [
+    "mars.paulius.trade/api/*"
+  ],
+  "build": {
+    "command": "npm run build"
+  }
+} 
