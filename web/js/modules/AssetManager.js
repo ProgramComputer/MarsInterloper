@@ -147,7 +147,7 @@ export class AssetManager {
         
         // Load the starship model
         try {
-            await this.loadModel('starship', '/assets/spacex_starship-with_landing_legs_deployed.glb');
+            await this.loadModel('starship', '/assets/models/spacex_starship-with_landing_legs_deployed.glb');
             ////console.log('MarsInterloper: Starship model loaded successfully');
         } catch (error) {
             console.error('MarsInterloper: Error loading starship model:', error);
