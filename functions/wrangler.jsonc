@@ -6,7 +6,14 @@
     "ALLOWED_ORIGIN": "https://mars.paulius.trade"
   },
   "routes": [
-    "mars.paulius.trade/api/*"
+    "mars.paulius.trade/api/*",
+    "mars.paulius.trade/assets/*"
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ASSETS_BUCKET",
+      "bucket_name": "mars"
+    }
   ],
   "build": {
     "command": "npm run build"
