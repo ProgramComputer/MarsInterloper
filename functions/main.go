@@ -54,6 +54,21 @@ func main() {
 	mux.HandleFunc("/api/mars/sky", handleMarsSky)
 	mux.HandleFunc("/health", handleHealth)
 
+	// Serve assets from R2 bucket
+	mux.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+		// strip the /assets/ prefix to get the object key
+		key := strings.TrimPrefix(r.URL.Path, "/assets/")
+		// fetch object from R2
+		obj, err := workers.Env(r).R2().Bucket("ASSETS_BUCKET").Get(key)
+		if err != nil || obj == nil {
+			http.NotFound(w, r)
+			return
+		}
+		// write cached metadata and content
+		obj.WriteHttpMetadata(&w.Header())
+		io.Copy(w, obj.Body)
+	})
+
 	// Serve with workers
 	workers.Serve(mux)
 }
