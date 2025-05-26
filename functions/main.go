@@ -57,8 +57,9 @@ func main() {
 
 	// Serve assets from R2 bucket
 	mux.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
-		// strip the /assets/ prefix to get the object key
-		key := strings.TrimPrefix(r.URL.Path, "/assets/")
+		// The object key in R2 is the URL path without the leading slash.
+		// e.g., a request to /assets/models/file.glb maps to the key "assets/models/file.glb" in the R2 bucket.
+		key := strings.TrimPrefix(r.URL.Path, "/")
 		// get R2 bucket binding
 		bucket, err := cloudflare.NewR2Bucket("ASSETS_BUCKET")
 		if err != nil {
@@ -229,7 +230,7 @@ func handleMarsChunk(w http.ResponseWriter, r *http.Request) {
 		"chunkX":  chunkX,
 		"chunkZ":  chunkZ,
 		"size":    32,
-		"heights": heights[:100], // Limit data size for example
+		"elevation": heights[:100], // Limit data size for example
 		"source":  "procedural",
 	}
 	
@@ -245,14 +246,60 @@ func handleMarsSky(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	// Fetch star data from remote Hipparcos catalog
-	hipparcosURL := "https://raw.githubusercontent.com/ProgramComputer/MarsInterloper/refs/heads/main/assets/mars_data/hipparcos-voidmain.csv"
-	
+
+	// Get R2 bucket binding
+	bucket, err := cloudflare.NewR2Bucket("ASSETS_BUCKET")
+	if err != nil {
+		http.Error(w, "R2 binding error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Object key in R2
+	r2Key := "assets/mars_data/hipparcos-voidmain.csv"
+
+	// Fetch object from R2
+	obj, err := bucket.Get(r2Key)
+	if err != nil {
+		// Fallback to basic star data if R2 fetch fails
+		response := map[string]interface{}{
+			"stars": []map[string]interface{}{
+				{
+					"ra":   0.0,
+					"dec":  0.0,
+					"mag":  1.0,
+					"name": "Polaris (fallback - R2 error)",
+				},
+			},
+			"error":               "Failed to fetch star catalog from R2",
+			"fetch_error_details": err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	if obj == nil {
+		// Fallback if object is nil (shouldn't happen if err is nil, but good practice)
+		response := map[string]interface{}{
+			"stars": []map[string]interface{}{
+				{
+					"ra":   0.0,
+					"dec":  0.0,
+					"mag":  1.0,
+					"name": "Polaris (fallback - R2 object nil)",
+				},
+			},
+			"error": "Failed to fetch star catalog from R2: object not found or empty",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	// Get query parameters
 	minMag := r.URL.Query().Get("minMag")
 	maxMag := r.URL.Query().Get("maxMag")
 	limit := r.URL.Query().Get("limit")
-	
+
 	// Default values
 	if minMag == "" {
 		minMag = "-2"
@@ -263,41 +310,34 @@ func handleMarsSky(w http.ResponseWriter, r *http.Request) {
 	if limit == "" {
 		limit = "100"
 	}
-	
+
 	minMagFloat, _ := strconv.ParseFloat(minMag, 32)
 	maxMagFloat, _ := strconv.ParseFloat(maxMag, 32)
 	limitInt, _ := strconv.Atoi(limit)
-	
-	// Fetch the CSV data
-	resp, err := http.Get(hipparcosURL)
+
+	// Read limited amount of data to avoid memory issues
+	// Cloudflare Workers have a 128MB memory limit
+	limitedReader := io.LimitReader(obj.Body, 1024*1024) // 1MB limit
+	data, err := io.ReadAll(limitedReader)
 	if err != nil {
-		// Fallback to basic star data
+		// Fallback to basic star data if reading R2 object fails
 		response := map[string]interface{}{
 			"stars": []map[string]interface{}{
 				{
 					"ra":   0.0,
 					"dec":  0.0,
 					"mag":  1.0,
-					"name": "Polaris",
+					"name": "Polaris (fallback - R2 read error)",
 				},
 			},
-			"error": "Failed to fetch star catalog",
+			"error":               "Error reading star data from R2",
+			"fetch_error_details": err.Error(),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	defer resp.Body.Close()
-	
-	// Read limited amount of data to avoid memory issues
-	// Cloudflare Workers have a 128MB memory limit
-	limitedReader := io.LimitReader(resp.Body, 1024*1024) // 1MB limit
-	data, err := io.ReadAll(limitedReader)
-	if err != nil {
-		http.Error(w, "Error reading star data", http.StatusInternalServerError)
-		return
-	}
-	
+
 	// Parse CSV and filter stars
 	lines := strings.Split(string(data), "\n")
 	var stars []map[string]interface{}
