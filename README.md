@@ -2,7 +2,7 @@
 
 A browser-based 3D exploration game set on Mars, where players wake up in a habitat and venture out to explore the Martian surface.
 
-**[Play Live Demo](https://mars.paulius.trade/)**
+**[Play Live Demo](https://mars.pchirp.com/)**
 
 ## Overview
 

@@ -3,11 +3,11 @@
   "main": "./build/worker.mjs",
   "compatibility_date": "2025-05-24",
   "vars": {
-    "ALLOWED_ORIGIN": "https://mars.paulius.trade"
+    "ALLOWED_ORIGIN": "https://mars.pchirp.com"
   },
   "routes": [
-    "mars.paulius.trade/api/*",
-    "mars.paulius.trade/assets/*"
+    "mars.pchirp.com/api/*",
+    "mars.pchirp.com/assets/*"
   ],
   "r2_buckets": [
     {
@@ -18,4 +18,4 @@
   "build": {
     "command": "npm run build"
   }
-} 
+}
