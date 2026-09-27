@@ -58,6 +58,7 @@ Mars Interloper is a browser-based game that leverages modern web technologies t
 ## Project Structure
 
 - `cmd/server/`: Go backend entry point
+- `functions/`: Cloudflare Worker serving `/api/*` and `/assets/*` (from R2) on mars.pchirp.com; deploy with `npx wrangler deploy`
 - `web/js/`: Three.js implementation and game frontend
 - `assets/`: Game assets (models, textures, audio)
 
