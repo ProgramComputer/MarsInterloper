@@ -11,8 +11,14 @@ export class MultiplayerManager {
         this.playerModels = new Map(); // Map of player IDs to their model objects
         
         // Settings for synchronization
-        this.updateInterval = 50; // milliseconds between updates (increased frequency from 100ms to 50ms)
+        this.updateInterval = 50; // minimum milliseconds between updates while moving or turning
         this.lastUpdateTime = 0;
+        this.heartbeatInterval = 30000; // idle keep-alive; Cloudflare closes WebSockets silent for ~100s
+        this.positionEpsilon = 0.01; // world units of movement that count as a change
+        this.rotationEpsilon = 0.005; // radians of turning that count as a change
+        this.lastSentState = null; // position/rotation in the last update sent
+        this.lastSentAt = 0;
+        this.pendingStopUpdate = false; // send one more update after the player stops
         
         // Player model settings
         this.playerModelScale = 0.5;
@@ -152,6 +158,7 @@ export class MultiplayerManager {
     handleConnected(message) {
         ////console.log('Connected to server with ID:', message.id);
         this.playerId = message.id;
+        this.lastSentState = null; // announce our position right away on (re)connect
     }
     
     /**
@@ -528,11 +535,11 @@ export class MultiplayerManager {
             return;
         }
         
-        // Send position updates at fixed intervals
+        // Send position updates at most every updateInterval, and only when something changed
         this.lastUpdateTime += deltaTime * 1000; // Convert to milliseconds
-        
+
         if (this.lastUpdateTime >= this.updateInterval) {
-            this.sendPlayerUpdate();
+            this.maybeSendPlayerUpdate();
             this.lastUpdateTime = 0;
         }
         
@@ -574,11 +581,40 @@ export class MultiplayerManager {
     }
     
     /**
-     * Send player position and rotation to the server
+     * Send an update only if the player moved or turned since the last one, plus one final
+     * update after they stop (so other clients end the walk animation) and a periodic
+     * heartbeat. Sending every tick regardless cost 20 messages a second per idle player.
+     */
+    maybeSendPlayerUpdate() {
+        const { position, rotation } = this.playerController.camera;
+        const last = this.lastSentState;
+        const changed = !last ||
+            position.distanceToSquared(last.position) > this.positionEpsilon * this.positionEpsilon ||
+            Math.abs(rotation.x - last.rotation.x) > this.rotationEpsilon ||
+            Math.abs(rotation.y - last.rotation.y) > this.rotationEpsilon ||
+            Math.abs(rotation.z - last.rotation.z) > this.rotationEpsilon;
+        const now = Date.now();
+
+        if (changed) {
+            this.pendingStopUpdate = true;
+        } else if (this.pendingStopUpdate) {
+            this.pendingStopUpdate = false;
+        } else if (now - this.lastSentAt < this.heartbeatInterval) {
+            return;
+        }
+
+        if (this.sendPlayerUpdate()) {
+            this.lastSentState = { position: position.clone(), rotation: rotation.clone() };
+            this.lastSentAt = now;
+        }
+    }
+
+    /**
+     * Send player position and rotation to the server. Returns whether it was sent.
      */
     sendPlayerUpdate() {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-            return;
+            return false;
         }
         
         // Get player position and rotation
@@ -593,6 +629,7 @@ export class MultiplayerManager {
         
         // Send update to the server
         this.socket.send(JSON.stringify(update));
+        return true;
     }
     
     /**
