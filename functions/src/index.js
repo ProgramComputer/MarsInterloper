@@ -1,12 +1,15 @@
-// MarsInterloper Cloudflare Worker: game state, MOLA terrain, star catalog, and R2 assets.
+// MarsInterloper Cloudflare Worker: game state, MOLA terrain, Mars night sky, multiplayer, and R2 assets.
 //
 // Plain JavaScript on purpose: the previous Go/WASM build booted a fresh Go runtime on every
 // request and read whole 130MB MOLA tiles to answer single-point queries, which blew through the
 // Workers free-plan CPU and memory limits. Everything here reads only the bytes it needs from R2.
 
+import { BRIGHT_STARS, STAR_COLORS } from "./bright-stars.js";
+import { MultiplayerRoom } from "./multiplayer.js";
+
+export { MultiplayerRoom };
+
 const MANIFEST_KEY = "assets/mars_data/meg128_manifest.json";
-const STAR_CATALOG_KEY = "assets/mars_data/hipparcos-voidmain.csv";
-const STAR_CATALOG_MAX_BYTES = 1024 * 1024;
 
 const MAX_RESOLUTION = 512;
 const MAX_CHUNK_POINTS = MAX_RESOLUTION * MAX_RESOLUTION;
@@ -18,6 +21,8 @@ const MAX_RANGE_READS = 900;
 const R2_CONCURRENCY = 4;
 
 const TERRAIN_CACHE_CONTROL = "public, max-age=86400";
+// Bump when chunk contents change so stale edge-cached chunks are not served.
+const TERRAIN_CACHE_VERSION = 2;
 const SKY_CACHE_CONTROL = "public, max-age=3600";
 const ASSET_CACHE_CONTROL = "public, max-age=3600";
 
@@ -41,6 +46,8 @@ export default {
 		if (path.startsWith("/assets/")) return handleAsset(request, env, path);
 
 		switch (path) {
+			case "/ws":
+				return handleMultiplayer(request, env);
 			case "/api/health":
 				return handleHealth(request, env);
 			case "/api/game-state":
@@ -54,7 +61,7 @@ export default {
 			case "/api/mars/chunk":
 				return handleMarsChunk(request, env, ctx, url);
 			case "/api/mars/sky":
-				return handleMarsSky(request, env, ctx, url);
+				return handleMarsSky(request, env, url);
 			default:
 				return textError("404 page not found", 404);
 		}
@@ -185,13 +192,30 @@ function loadManifest(env) {
 		manifestPromise = (async () => {
 			const obj = await env.ASSETS_BUCKET.get(MANIFEST_KEY);
 			if (!obj) throw new Error(`manifest ${MANIFEST_KEY} not found in R2`);
-			return obj.json();
+			return (await obj.json()).map(withTileBounds);
 		})();
 		manifestPromise.catch(() => {
 			manifestPromise = undefined;
 		});
 	}
 	return manifestPromise;
+}
+
+// MEGDR tile names encode the tile's northern edge and western longitude: megt44n000hb.img covers
+// 0-44N, megt00n000hb.img 0-44S, and megt44s000hb.img 44S-88S. The manifest in R2 lists megt44s
+// as 0-44S, so bounds are taken from the name whenever it follows that pattern.
+function withTileBounds(file) {
+	const match = /meg[a-z](\d{2})([ns])(\d{3})/i.exec(file.r2Key.split("/").pop());
+	if (!match) return file;
+	const maxLat = Number(match[1]) * (match[2].toLowerCase() === "n" ? 1 : -1);
+	const minLon = Number(match[3]);
+	return {
+		...file,
+		maxLat,
+		minLat: maxLat - file.height / file.pixelsPerDeg,
+		minLon,
+		maxLon: minLon + file.width / file.pixelsPerDeg,
+	};
 }
 
 function normalizeLon(lon) {
@@ -224,15 +248,9 @@ function pixelX(file, lon) {
 	return clamp(Math.trunc(((lon - file.minLon) / (file.maxLon - file.minLon)) * file.width), file.width);
 }
 
-// Row mapping matches cmd/server/mars_terrain.go so terrain looks the same as before.
+// MEGDR rows run from the tile's northern edge (row 0) southward.
 function pixelY(file, lat) {
-	let fraction;
-	if (file.minLat < 0 && file.maxLat <= 0) {
-		fraction = Math.abs(lat - file.maxLat) / Math.abs(file.minLat - file.maxLat);
-	} else {
-		fraction = (lat - file.minLat) / (file.maxLat - file.minLat);
-	}
-	return clamp(Math.trunc(fraction * file.height), file.height);
+	return clamp(Math.trunc(((file.maxLat - lat) / (file.maxLat - file.minLat)) * file.height), file.height);
 }
 
 function sampleFormat(file) {
@@ -327,7 +345,7 @@ async function handleMarsChunk(request, env, ctx, url) {
 
 	const cacheKey = new Request(
 		`${url.origin}/api/mars/chunk?` +
-			new URLSearchParams({ minLat, maxLat, minLon, maxLon, resolution }).toString(),
+			new URLSearchParams({ minLat, maxLat, minLon, maxLon, resolution, v: TERRAIN_CACHE_VERSION }).toString(),
 	);
 	const { response, hit } = await cached(ctx, cacheKey, async () => {
 		let files;
@@ -561,78 +579,141 @@ async function forEachLimited(items, limit, fn) {
 }
 
 // ---------------------------------------------------------------------------
-// Star catalog
+// Mars night sky
 
-function skyFallback(env, label, error, details) {
-	const body = { stars: [{ ra: 0, dec: 0, mag: 1, name: `Polaris (fallback - ${label})` }], error };
-	if (details) body.fetch_error_details = details;
-	return jsonResponse(env, body);
+// IAU 2015 direction of Mars' north pole (ICRF) and Mars' orbit plane (J2000 ecliptic).
+const MARS_POLE_RA = 317.68143;
+const MARS_POLE_DEC = 52.8865;
+const MARS_ORBIT_INCLINATION = 1.84969;
+const MARS_ORBIT_ASCENDING_NODE = 49.55954;
+const J2000_OBLIQUITY = 23.43928;
+// The game has no calendar, so the sky is drawn at Mars' northern spring equinox (solar
+// longitude 0), when the Sun sits at Mars' vernal equinox.
+const SKY_SOLAR_LONGITUDE = 0;
+// Include stars slightly below the horizon, as cmd/server/mars_sky.go does.
+const MIN_STAR_ALTITUDE = -10;
+const DEFAULT_STAR_LIMIT = 500;
+const DEG = Math.PI / 180;
+
+// Per star, in Mars' equatorial frame: right ascension (radians), sin and cos of declination.
+let marsStarPositions;
+let sunMarsRightAscension;
+
+function unitVector(raDeg, decDeg) {
+	const ra = raDeg * DEG;
+	const dec = decDeg * DEG;
+	return [Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)];
 }
 
-async function handleMarsSky(request, env, ctx, url) {
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+function normalize(v) {
+	const length = Math.hypot(v[0], v[1], v[2]);
+	return [v[0] / length, v[1] / length, v[2] / length];
+}
+
+// Axes of Mars' equatorial frame expressed in ICRF: z is Mars' north pole, x its vernal equinox.
+function marsEquatorialFrame() {
+	const z = unitVector(MARS_POLE_RA, MARS_POLE_DEC);
+	const i = MARS_ORBIT_INCLINATION * DEG;
+	const node = MARS_ORBIT_ASCENDING_NODE * DEG;
+	const eps = J2000_OBLIQUITY * DEG;
+	const eclipticNormal = [Math.sin(i) * Math.sin(node), -Math.sin(i) * Math.cos(node), Math.cos(i)];
+	const orbitNormal = [
+		eclipticNormal[0],
+		eclipticNormal[1] * Math.cos(eps) - eclipticNormal[2] * Math.sin(eps),
+		eclipticNormal[1] * Math.sin(eps) + eclipticNormal[2] * Math.cos(eps),
+	];
+	// The vernal equinox is where Mars' orbit plane crosses its equator heading north.
+	const x = normalize(cross(z, orbitNormal));
+	return { x, y: cross(z, x), z, obliquity: Math.acos(dot(z, orbitNormal)) };
+}
+
+function loadMarsSky() {
+	if (marsStarPositions) return;
+	const { x, y, z, obliquity } = marsEquatorialFrame();
+	const count = BRIGHT_STARS.length / 5;
+	marsStarPositions = new Float64Array(count * 3);
+	for (let i = 0; i < count; i++) {
+		const star = unitVector(BRIGHT_STARS[i * 5 + 1], BRIGHT_STARS[i * 5 + 2]);
+		const sinDec = dot(star, z);
+		marsStarPositions[i * 3] = Math.atan2(dot(star, y), dot(star, x));
+		marsStarPositions[i * 3 + 1] = sinDec;
+		marsStarPositions[i * 3 + 2] = Math.sqrt(Math.max(0, 1 - sinDec * sinDec));
+	}
+	const ls = SKY_SOLAR_LONGITUDE * DEG;
+	sunMarsRightAscension = Math.atan2(Math.sin(ls) * Math.cos(obliquity), Math.cos(ls));
+}
+
+const round3 = (value) => Math.round(value * 1000) / 1000;
+
+// Brightest stars above MIN_STAR_ALTITUDE for an observer at `lat` at local solar time
+// `timeHours` (12 = noon), with azimuth measured clockwise from north.
+function visibleStars(lat, timeHours, limit) {
+	loadMarsSky();
+	const siderealAngle = sunMarsRightAscension + (timeHours - 12) * 15 * DEG;
+	const sinLat = Math.sin(lat * DEG);
+	const cosLat = Math.cos(lat * DEG);
+	const minSinAltitude = Math.sin(MIN_STAR_ALTITUDE * DEG);
+	const count = BRIGHT_STARS.length / 5;
+	const stars = [];
+	for (let i = 0; i < count && stars.length < limit; i++) {
+		const hourAngle = siderealAngle - marsStarPositions[i * 3];
+		const sinDec = marsStarPositions[i * 3 + 1];
+		const cosDec = marsStarPositions[i * 3 + 2];
+		const cosHourAngle = Math.cos(hourAngle);
+		const sinAltitude = sinDec * sinLat + cosDec * cosLat * cosHourAngle;
+		if (sinAltitude < minSinAltitude) continue;
+		const east = -cosDec * Math.sin(hourAngle);
+		const north = sinDec * cosLat - cosDec * sinLat * cosHourAngle;
+		const azimuth = Math.atan2(east, north) / DEG;
+		stars.push({
+			hip: BRIGHT_STARS[i * 5],
+			magnitude: BRIGHT_STARS[i * 5 + 3],
+			altitude: round3(Math.asin(sinAltitude) / DEG),
+			azimuth: round3(azimuth < 0 ? azimuth + 360 : azimuth),
+			color: STAR_COLORS[BRIGHT_STARS[i * 5 + 4]],
+		});
+	}
+	return stars;
+}
+
+function handleMarsSky(request, env, url) {
 	if (request.method === "OPTIONS") return preflight(env);
 
 	const params = url.searchParams;
-	const minMag = parseFloatStrict(params.get("minMag") || "-2");
-	const maxMag = parseFloatStrict(params.get("maxMag") || "6");
-	const limitValue = parseIntStrict(params.get("limit") || "100");
-	const limit = Number.isNaN(limitValue) ? 0 : limitValue;
-	const min = Number.isNaN(minMag) ? 0 : minMag;
-	const max = Number.isNaN(maxMag) ? 0 : maxMag;
+	if (!params.get("lat") || !params.get("lon")) return textError("Missing lat/lon parameters", 400, env);
+	const lat = parseFloatStrict(params.get("lat"));
+	const lon = parseFloatStrict(params.get("lon"));
+	if (Number.isNaN(lat) || lat < -90 || lat > 90) return textError("Invalid latitude value", 400, env);
+	if (Number.isNaN(lon)) return textError("Invalid longitude value", 400, env);
+	const time = parseFloatStrict(params.get("time"));
+	const timeHours = Number.isNaN(time) ? 12 : time;
+	const limitValue = parseIntStrict(params.get("limit"));
+	const limit = limitValue > 0 ? limitValue : DEFAULT_STAR_LIMIT;
 
-	// lat/lon/time do not affect the result, so leave them out of the cache key.
-	const cacheKey = new Request(
-		`${url.origin}/api/mars/sky?` + new URLSearchParams({ minMag: min, maxMag: max, limit }).toString(),
+	return jsonResponse(
+		env,
+		{ marsLocation: { latitude: lat, longitude: lon, timeHours }, stars: visibleStars(lat, timeHours, limit) },
+		{ "Cache-Control": SKY_CACHE_CONTROL },
 	);
-	const { response } = await cached(ctx, cacheKey, async () => {
-		let obj;
-		try {
-			obj = await env.ASSETS_BUCKET.get(STAR_CATALOG_KEY, { range: { offset: 0, length: STAR_CATALOG_MAX_BYTES } });
-		} catch (err) {
-			return skyFallback(env, "R2 error", "Failed to fetch star catalog from R2", err.message);
-		}
-		if (!obj) {
-			return skyFallback(env, "R2 object nil", "Failed to fetch star catalog from R2: object not found or empty");
-		}
+}
 
-		let bytes;
-		try {
-			bytes = new Uint8Array(await obj.arrayBuffer());
-		} catch (err) {
-			return skyFallback(env, "R2 read error", "Error reading star data from R2", err.message);
-		}
-		// Only the header plus the first `limit` data lines are ever considered.
-		let end = 0;
-		for (let line = 0; line < limit + 2 && end < bytes.length; line++) {
-			const nl = bytes.indexOf(10, end);
-			end = nl < 0 ? bytes.length : nl + 1;
-		}
-		const lines = new TextDecoder().decode(bytes.subarray(0, end)).split("\n");
+// ---------------------------------------------------------------------------
+// Multiplayer
 
-		const stars = [];
-		for (let i = 1; i < lines.length && i <= limit + 1; i++) {
-			const fields = lines[i].split(",");
-			if (fields.length < 10) continue;
-			const mag = parseFloatStrict(fields[5].trim());
-			if (Number.isNaN(mag) || mag < min || mag > max) continue;
-			const ra = parseFloatStrict(fields[8].trim());
-			const dec = parseFloatStrict(fields[9].trim());
-			stars.push({
-				ra: Number.isNaN(ra) ? 0 : ra,
-				dec: Number.isNaN(dec) ? 0 : dec,
-				mag,
-				hip: fields[1].trim(),
-			});
-			if (stars.length >= limit) break;
-		}
+// Every player shares one room; the Durable Object holds the WebSocket connections.
+function handleMultiplayer(request, env) {
+	if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+		return textError("Expected a WebSocket upgrade", 426);
+	}
+	// Browsers always send Origin; only the game's own page may join the room.
+	const origin = request.headers.get("Origin");
+	const allowed = env.ALLOWED_ORIGIN || "*";
+	if (origin && allowed !== "*" && origin !== allowed) return textError("Origin not allowed", 403);
 
-		return jsonResponse(
-			env,
-			{ stars, count: stars.length, source: "hipparcos", minMag: min, maxMag: max },
-			{ "Cache-Control": SKY_CACHE_CONTROL },
-		);
-	});
-	return response;
+	return env.MULTIPLAYER.get(env.MULTIPLAYER.idFromName("global")).fetch(request);
 }
 
 // ---------------------------------------------------------------------------

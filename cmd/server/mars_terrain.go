@@ -240,14 +240,13 @@ func (m *MarsTerrainService) loadRegionalFile(filePath string, pixelsPerDeg int,
 		log.Printf("Warning: Could not parse latitude from filename %s, using defaults: [%.1f°,%.1f°]", 
 			fileName, minLat, maxLat)
 	} else {
-		// Use the parsed latitude band
-		if isNorth {
-			minLat = 0.0
-			maxLat = float64(latBand)
-		} else {
-			minLat = -float64(latBand)
-			maxLat = 0.0
+		// The number is the tile's northern edge and each tile spans 44 degrees:
+		// megt44n covers 0-44N, megt00n covers 0-44S, megt44s covers 44S-88S.
+		maxLat = float64(latBand)
+		if !isNorth {
+			maxLat = -maxLat
 		}
+		minLat = maxLat - 44.0
 	}
 	
 	// Extract longitude from filename (3 digits after 'n' or 's')
@@ -368,7 +367,11 @@ func (m *MarsTerrainService) GetElevationAt(lat, lon float64) (float32, error) {
 	}
 	
 	// For latitude, it depends on whether this is a north or south hemispheric file
-	if dataFile.MaxLat > 0 && dataFile.MinLat >= 0 {
+	if !dataFile.IsPolar {
+		// Regional MEGDR tiles store rows from the northern edge (row 0) southward
+		latFraction := (dataFile.MaxLat - lat) / (dataFile.MaxLat - dataFile.MinLat)
+		pixelY = int(latFraction * float64(dataFile.Height))
+	} else if dataFile.MaxLat > 0 && dataFile.MinLat >= 0 {
 		// North hemisphere file - latitude increases from 0 at equator to 90 at pole
 		// But pixel Y value increases from 0 at min latitude to height-1 at max latitude
 		// So bottom of image is min latitude (near equator)
@@ -563,7 +566,11 @@ func (m *MarsTerrainService) getChunkInternal(minLat, maxLat, minLon, maxLon flo
 			}
 			
 			// For latitude, it depends on whether this is a north or south hemispheric file
-			if dataFile.MaxLat > 0 && dataFile.MinLat >= 0 {
+			if !dataFile.IsPolar {
+				// Regional MEGDR tiles store rows from the northern edge (row 0) southward
+				latFraction := (dataFile.MaxLat - lat) / (dataFile.MaxLat - dataFile.MinLat)
+				pixelY = int(latFraction * float64(dataFile.Height))
+			} else if dataFile.MaxLat > 0 && dataFile.MinLat >= 0 {
 				// North hemisphere file
 				latRange := dataFile.MaxLat - dataFile.MinLat
 				latFraction := (lat - dataFile.MinLat) / latRange

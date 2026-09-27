@@ -7,12 +7,27 @@
   },
   "routes": [
     "mars.pchirp.com/api/*",
-    "mars.pchirp.com/assets/*"
+    "mars.pchirp.com/assets/*",
+    "mars.pchirp.com/ws"
   ],
   "r2_buckets": [
     {
       "binding": "ASSETS_BUCKET",
       "bucket_name": "mars"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MULTIPLAYER",
+        "class_name": "MultiplayerRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MultiplayerRoom"]
     }
   ]
 }
